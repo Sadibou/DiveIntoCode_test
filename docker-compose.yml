@@ -1,0 +1,54 @@
+# https://scotto.medium.com/2021-docker-ruby-3-rails-6-puma-nginx-postgres-d84c95f68637
+version: "3.8"
+volumes:
+  db-store:
+  tmp-data:
+  public-data:
+  redis-store:
+services:
+  db:
+    image: postgres:13-alpine
+    command: ["postgres", "-c", "fsync=false", "-c", "full_page_writes=off"]
+    environment:
+      POSTGRES_PASSWORD: password
+    volumes:
+      - type: volume
+        source: db-store
+        target: /var/lib/postgresql/data
+        volume:
+          nocopy: true
+    ports:
+      - "5432:5432"
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/app/app.Dockerfile
+    command: ash -c "rm -f tmp/pids/server.pid && bundle exec puma -C config/puma.rb"
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/var/www/test_app
+      - tmp-data:/var/www/test_app/tmp
+      - public-data:/var/www/test_app/public
+    depends_on:
+      - db
+      - redis
+  redis:
+    image: redis:6-alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - type: volume
+        source: redis-store
+        target: /data
+  nginx:
+    build:
+      context: .
+      dockerfile: ./docker/web/nginx.Dockerfile
+    volumes:
+      - tmp-data:/var/www/test_app/tmp
+      - public-data:/var/www/test_app/public
+    depends_on:
+      - app
+    ports:
+      - 80:80
